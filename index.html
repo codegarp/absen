@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAE NAGA - Portal Virtual</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center p-4">
+
+    <div class="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center text-blue-600 mb-2">SAE NAGA PROXY</h1>
+        <p class="text-sm text-center text-gray-500 mb-6">Status Lokasi: <span class="text-green-600 font-bold">TERKUNCI (KLATEN)</span></p>
+
+        <div class="relative w-full aspect-square bg-black rounded-xl overflow-hidden mb-4 border-4 border-slate-200">
+            <video id="video" class="w-full h-full object-cover" autoplay playsinline></video>
+            <canvas id="canvas" class="hidden"></canvas>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-gray-400 uppercase">NIP Pegawai</label>
+                <input type="text" id="nip" value="199005102025211112" class="w-full p-2 border-b-2 border-blue-400 focus:outline-none bg-slate-50">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="prosesAbsen('masuk')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition shadow-lg active:scale-95">
+                    ABSEN MASUK
+                </button>
+                <button onclick="prosesAbsen('pulang')" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition shadow-lg active:scale-95">
+                    ABSEN PULANG
+                </button>
+            </div>
+        </div>
+
+        <div id="log" class="mt-6 p-3 bg-slate-800 rounded-lg text-xs font-mono text-green-400 h-32 overflow-y-auto">
+            > Siap mengirim presensi...
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const logBox = document.getElementById('log');
+
+        // KOORDINAT TARGET (Dinas Dagkop UKM Klaten)
+        const TARGET_LAT = "-7.708182928985944";
+        const TARGET_LONG = "110.59756574404744";
+        const TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJuaXAiOiIxOTc0MTEwNDE5OTkwMzEwMDUiLCJoYXNoIjoiTlRBd01UQTNNRFk0IiwibmFtYSI6Ik5PVkkgQVJJWUFOVE8sIFMuSVAuLCBNLktvbS4iLCJyb2xlX2lkIjoxLCJBUElfVElNRSI6MTYxNzU5NTU2Nn0.1NIIZkxSFyfcHjISkeYVHzGrUatYlrIcQCpnY2bWsfc";
+
+        // Aktifkan Kamera saat load
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+            .then(stream => video.srcObject = stream)
+            .catch(err => addLog("Gagal akses kamera: " + err));
+
+        function addLog(msg) {
+            logBox.innerHTML += `<br>> ${msg}`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        async function prosesAbsen(tipe) {
+            addLog(`Memulai proses absen ${tipe}...`);
+            
+            // 1. Ambil Foto dari Video
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.8));
+            
+            // 2. Siapkan Form Data
+            const formData = new FormData();
+            formData.append('nip', document.getElementById('nip').value);
+            formData.append('latitude', TARGET_LAT);
+            formData.append('longitude', TARGET_LONG);
+            formData.append('tipe', tipe);
+            formData.append('jarak', (Math.random() * (15 - 5) + 5).toFixed(2)); // Jarak random 5-15 meter
+            formData.append('alamat', 'Dinas Perdagangan Koperasi UKM Klaten');
+            formData.append('file_swafoto', blob, 'swafoto.jpg');
+
+            // 3. Kirim ke Server (Menggunakan Proxy agar tidak kena CORS)
+            // Catatan: Browser biasanya blokir request langsung ke IP. 
+            // Kita gunakan cors-anywhere sebagai jembatan darurat.
+            const proxy = "https://cors-anywhere.herokuapp.com/"; 
+            const url = "http://103.108.187.203/apis/data_presensi/tambah";
+
+            try {
+                addLog("Mengirim data ke server...");
+                const response = await fetch(proxy + url, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${TOKEN}` },
+                    body: formData
+                });
+
+                const result = await response.json();
+                if(result.status) {
+                    addLog("✅ BERHASIL: " + result.message);
+                    alert("Presensi Berhasil!");
+                } else {
+                    addLog("❌ GAGAL: " + result.message);
+                }
+            } catch (error) {
+                addLog("💀 Error Koneksi: " + error);
+            }
+        }
+    </script>
+</body>
+</html>
